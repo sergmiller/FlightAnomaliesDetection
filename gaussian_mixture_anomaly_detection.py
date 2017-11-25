@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
+import pandas as pd
 
 
 class GaussianMixtureInTimeAnomalyDetector:
@@ -161,6 +162,14 @@ class GaussianMixtureInTimeAnomalyDetector:
                 log_likelihood[f][t] = self.__evaluate_sample_in_time(X[f][t], t)
                                  
         return log_likelihood
+
+    def smoothed_sample_anomalies(self, scores, halflife=2):
+    	'''
+			extract exponential weighted sample likelihoode
+    	'''
+    	frames = [pd.DataFrame(series) for series in scores]
+    	return np.array([np.array(pd.ewma(series, halflife)) for series in frames])
+
                             
     def find_anomalies(self, scores, strategy='sample', anomaly_top=0.01, log_likelihood_threshold=None):                                    
         ''' 
