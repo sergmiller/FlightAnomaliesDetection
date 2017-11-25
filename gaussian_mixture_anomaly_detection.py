@@ -168,7 +168,7 @@ class GaussianMixtureInTimeAnomalyDetector:
 			extract exponential weighted sample likelihoode
     	'''
     	frames = [pd.DataFrame(series) for series in scores]
-    	return np.array([np.array(pd.ewma(series, halflife)) for series in frames])
+    	return np.array([np.array(pd.ewma(series, halflife)).reshape(-1) for series in frames])
 
                             
     def find_anomalies(self, scores, strategy='sample', anomaly_top=0.01, log_likelihood_threshold=None):                                    
@@ -224,3 +224,27 @@ class GaussianMixtureInTimeAnomalyDetector:
                 bound = len(sorted_scores)
 
         return serialized_scores[:bound], log_likelihood_threshold
+
+
+def extract_anomaly_target(frame, frame_period, halflife, 
+                            horizont, n_components=35, top=0.01):
+    assert len(frame.shape) == 2
+    assert isinstance(frame, pd.DataFrame)
+    data = np.array(frame).reshape(frame_period, -1, frame.shape[1])
+    detector = GaussianMixtureInTimeAnomalyDetector(n_components=10, random_state=1)
+    # scores  - лограифмическое правдоподобие нормальности для каждого сэмпла
+    scores = detector.fit(data)  
+    smoothed_scores = detector.smoothed_sample_anomalies(scores, halflife)
+    anomalies, treshold = detector.find_anomalies(scores, anomaly_top=top)
+    anomaly_indexes = [t[1][0] * frame_period + t[1][1] for t in anomalies]
+    all_anomalies = set()
+    for a in anomaly_indexes:
+        for l in np.arange(horizont):
+            all_anomalies.add(a - l)
+            
+    targets = np.zeros(frame.shape[0])
+    
+    for a in all_anomalies:
+        targets[a] = 1
+    
+    return targets
