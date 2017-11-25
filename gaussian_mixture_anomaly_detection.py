@@ -65,6 +65,8 @@ class GaussianMixtureInTimeAnomalyDetector:
         self.cluster_weights = gm.weights_
         self.cluster_means = gm.means_
         self.cluster_covariances = gm.covariances_
+
+        print('Start probabilities memorization')
                             
         self.__memorize_probs()
                 
