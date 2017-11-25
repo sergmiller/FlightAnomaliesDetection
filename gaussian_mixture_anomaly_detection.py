@@ -163,14 +163,15 @@ class GaussianMixtureInTimeAnomalyDetector:
                                  
         return log_likelihood
 
-    def smoothed_sample_anomalies(self, scores, halflife=2):
-    	'''
-			extract exponential weighted sample likelihoode
-    	'''
-    	frames = [pd.DataFrame(series) for series in scores]
-    	return np.array([np.array(pd.ewma(series, halflife)).reshape(-1) for series in frames])
 
-                            
+    def smoothed_sample_anomalies(self, scores, halflife=2):
+        '''
+            extract exponential weighted sample likelihoode
+        '''
+        frames = [pd.DataFrame(series) for series in scores]
+        return np.array([np.array(pd.ewma(series, halflife)).reshape(-1) for series in frames])
+
+                          
     def find_anomalies(self, scores, strategy='sample', anomaly_top=0.01, log_likelihood_threshold=None):                                    
         ''' 
             extract abnormal samples
@@ -230,8 +231,8 @@ def extract_anomaly_target(frame, frame_period, halflife,
                             horizont, n_components=35, top=0.01):
     assert len(frame.shape) == 2
     assert isinstance(frame, pd.DataFrame)
-    data = np.array(frame).reshape(frame_period, -1, frame.shape[1])
-    detector = GaussianMixtureInTimeAnomalyDetector(n_components=10, random_state=1)
+    data = np.array(frame).reshape(-1, frame_period, frame.shape[1])
+    detector = GaussianMixtureInTimeAnomalyDetector(n_components=n_components, random_state=1)
     # scores  - лограифмическое правдоподобие нормальности для каждого сэмпла
     scores = detector.fit(data)  
     smoothed_scores = detector.smoothed_sample_anomalies(scores, halflife)
@@ -240,7 +241,7 @@ def extract_anomaly_target(frame, frame_period, halflife,
     all_anomalies = set()
     for a in anomaly_indexes:
         for l in np.arange(horizont):
-            all_anomalies.add(a - l)
+            all_anomalies.add(min(a + l, frame.shape[0]))
             
     targets = np.zeros(frame.shape[0])
     
