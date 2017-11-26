@@ -1,8 +1,33 @@
 #!/usr/bin/env python
+"""
+Copyright (c) 2017 Sergei Miller
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Partially base on http://www.sciencedirect.com/science/article/pii/S0968090X16000188
+"""
+
 import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
+from copy import deepcopy
 
 
 class GaussianMixtureInTimeAnomalyDetector:
@@ -231,9 +256,15 @@ def extract_anomaly_target(frame, frame_period, halflife,
                             horizont, n_components=35, top=0.01):
     assert len(frame.shape) == 2
     assert isinstance(frame, pd.DataFrame)
-    data = np.array(frame).reshape(-1, frame_period, frame.shape[1])
+    frame = np.array(deepcopy(frame))
+    start_size = frame.shape[0]
+    if frame.shape[0] % frame_period != 0:
+        print("remove last elements until period")
+        for _ in np.arange(frame.shape[0] % frame_period):
+            frame = np.delete(frame, -1, 0)
+
+    data = frame.reshape(-1, frame_period, frame.shape[1])
     detector = GaussianMixtureInTimeAnomalyDetector(n_components=n_components, random_state=1)
-    # scores  - лограифмическое правдоподобие нормальности для каждого сэмпла
     scores = detector.fit(data)
     smoothed_scores = detector.smoothed_sample_anomalies(scores, halflife)
     anomalies, treshold = detector.find_anomalies(scores, anomaly_top=top)
@@ -243,7 +274,7 @@ def extract_anomaly_target(frame, frame_period, halflife,
         for l in np.arange(horizont):
             all_anomalies.add(max(a - l, 0))
 
-    targets = np.zeros(frame.shape[0])
+    targets = np.zeros(start_size)
 
     for a in all_anomalies:
         targets[a] = 1
