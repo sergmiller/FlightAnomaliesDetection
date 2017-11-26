@@ -94,7 +94,7 @@ class GaussianMixtureInTimeAnomalyDetector:
         # memorization all P(cluster|sample)
         self.__p_cluster_sample = np.zeros((self.n_components, self.T, self.F))
 
-        for series in tqdm(np.arange(self.F), postion=0):
+        for series in tqdm(np.arange(self.F), position=0):
             for time in np.arange(self.T):
                 probs = [self.cluster_weights[i] * self.__p_sample_cluster(self.X[series][time], i) \
            			for i in np.arange(self.n_components)]
