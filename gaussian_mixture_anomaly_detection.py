@@ -253,7 +253,7 @@ class GaussianMixtureInTimeAnomalyDetector:
 
 
 def extract_anomaly_target(frame, frame_period, halflife,
-                            horizont, n_components=35, top=0.01):
+                            horizont, n_components=35, top=0.01, more_info=False):
     assert len(frame.shape) == 2
     assert isinstance(frame, pd.DataFrame)
     frame = np.array(deepcopy(frame))
@@ -279,4 +279,7 @@ def extract_anomaly_target(frame, frame_period, halflife,
     for a in all_anomalies:
         targets[a] = 1
 
-    return targets
+    if more_info:
+        return targets, scores, smoothed_scores, treshold
+    else:
+        return targets
