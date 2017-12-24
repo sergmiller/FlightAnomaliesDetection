@@ -267,7 +267,7 @@ def extract_anomaly_target(frame, frame_period, halflife,
     detector = GaussianMixtureInTimeAnomalyDetector(n_components=n_components, random_state=1)
     scores = detector.fit(data)
     smoothed_scores = detector.smoothed_sample_anomalies(scores, halflife)
-    anomalies, treshold = detector.find_anomalies(scores, anomaly_top=top)
+    anomalies, treshold = detector.find_anomalies(smoothed_scores, anomaly_top=top)
     anomaly_indexes = [t[1][0] * frame_period + t[1][1] for t in anomalies]
     all_anomalies = set()
     for a in anomaly_indexes:
