@@ -26,7 +26,13 @@ Partially base on http://www.sciencedirect.com/science/article/pii/S0968090X1600
 import numpy as np
 import pandas as pd
 
+import sys
+
 from tqdm import tqdm
+from copy import deepcopy
+
+from sklearn.mixture import GaussianMixture
+from numpy.linalg import norm
 from copy import deepcopy
 
 
@@ -40,6 +46,7 @@ class GaussianMixtureInTimeAnomalyDetector:
                     covariance_type='diag',
                     init_params='kmeans',
                     random_state=None,
+                    verbose=0,
                 ):
         '''
             Constructor accepts some args for sklearn.mixture.GaussianMixture inside.
@@ -52,6 +59,7 @@ class GaussianMixtureInTimeAnomalyDetector:
         self.covariance_type = covariance_type
         self.init_params = init_params
         self.random_state = random_state
+        self.verbose = verbose
 
         self.eps = 1e-12  # feature-normalization constant
 
@@ -60,9 +68,6 @@ class GaussianMixtureInTimeAnomalyDetector:
             X must contains F objects time series with length T vectors-features with size N each
             i. e. X.shape is (F, N, M)
         '''
-        from sklearn.mixture import GaussianMixture
-        from numpy.linalg import norm
-        from copy import deepcopy
 
         X = np.array(X)
 
@@ -93,7 +98,7 @@ class GaussianMixtureInTimeAnomalyDetector:
         self.cluster_means = gm.means_
         self.cluster_covariances = gm.covariances_
 
-        print('Start probabilities memorization')
+        print('Start probabilities memorization',file=sys.stderr)
 
         self.__memorize_probs()
 
@@ -114,6 +119,12 @@ class GaussianMixtureInTimeAnomalyDetector:
 
         return self._evaluate_log_likelihood(X)
 
+
+    def predict_point(self, X):
+        '''
+            Calculate log-likelihood for single sample (not series or group of series)
+        '''
+        pass
 
     def __memorize_probs(self):
         # memorization all P(cluster|sample)
@@ -150,6 +161,7 @@ class GaussianMixtureInTimeAnomalyDetector:
         logp = -0.5 * ((delta.dot(inv * delta)) + np.log(np.prod(cov) + self.eps) + self.N * np.log(2 * np.pi))
 
         return np.exp(logp)
+
 
     def __p_sample_cluster(self, x, cluster):
         '''
@@ -189,20 +201,11 @@ class GaussianMixtureInTimeAnomalyDetector:
         return log_likelihood
 
 
-    def smoothed_sample_anomalies(self, scores, halflife=2):
-        '''
-            extract exponential weighted sample likelihoode
-        '''
-        frames = [pd.DataFrame(series) for series in scores]
-        return np.array([np.array(pd.ewma(series, halflife)).reshape(-1) for series in frames])
-
-
     def find_anomalies(self, scores, strategy='sample', anomaly_top=0.01, log_likelihood_threshold=None):
         '''
-            extract abnormal samples
+            Extract abnormal samples.
 
             Args:
-
                 scores - log_likelihoods for each one-time-slice sample,
 
                 dim(X) = 2, X.shape[1] must be equal time length(shape[1])
@@ -233,7 +236,7 @@ class GaussianMixtureInTimeAnomalyDetector:
             serialized_scores = [(np.sum(scores[series]), (series))
                                  for series in np.arange(scores.shape[0])]
         else:
-            raise  ValueError("strategy must be in {}".format(['sample', 'series']))
+            raise ValueError("strategy must be in {}".format(['sample', 'series']))
 
         serialized_scores.sort()
 
@@ -252,19 +255,43 @@ class GaussianMixtureInTimeAnomalyDetector:
         return serialized_scores[:bound], log_likelihood_threshold
 
 
+
+### Additional functionality for specific tasks ###
+
+
+def smoothed_sample_anomalies(self, scores, halflife=2):
+    '''
+        Exponential weighted sample likelihood.
+        Args:
+            scores - result of running ClusterAD-DataSample algorithm for samples
+            halflife -  size of smoothing window.
+    '''
+    frames = [pd.DataFrame(series) for series in scores]
+    return np.array([np.array(pd.ewma(series, halflife)).reshape(-1) for series in frames])
+
+
 def extract_anomaly_target(frame, frame_period, halflife,
-                            horizont, n_components=35, top=0.01, more_info=False):
+                            horizont, top=0.01, more_info=False, **kwargs):
+    '''
+        Extract target anomalies from 2-dim frame.
+        Args:
+            frame - 2-dim pandas Dataframe
+            frame_period - period for division into group of independent series
+            halflife - size of smoothing window
+            top - anomaly bound
+            more_info - return more important objects if True
+    '''
     assert len(frame.shape) == 2
     assert isinstance(frame, pd.DataFrame)
     frame = np.array(deepcopy(frame))
     start_size = frame.shape[0]
     if frame.shape[0] % frame_period != 0:
-        print("remove last elements until period")
+        print("remove last elements until period", file=sys.stderr)
         for _ in np.arange(frame.shape[0] % frame_period):
             frame = np.delete(frame, -1, 0)
 
     data = frame.reshape(-1, frame_period, frame.shape[1])
-    detector = GaussianMixtureInTimeAnomalyDetector(n_components=n_components, random_state=1)
+    detector = GaussianMixtureInTimeAnomalyDetector(**kwargs)
     scores = detector.fit(data)
     smoothed_scores = detector.smoothed_sample_anomalies(scores, halflife)
     anomalies, treshold = detector.find_anomalies(smoothed_scores, anomaly_top=top)
