@@ -41,7 +41,10 @@ class GaussianMixtureInTimeAnomalyDetector:
         ClusterAD-DataSample anomaly-detection method implementation
     '''
     def __init__(self,
-                    n_components=35,
+                    n_components=None,
+                    n_min=1,
+                    n_max=10,
+                    step=1,
                     tol=1e-6,
                     covariance_type='diag',
                     init_params='kmeans',
@@ -49,11 +52,17 @@ class GaussianMixtureInTimeAnomalyDetector:
                     verbose=0,
                 ):
         '''
-            Constructor accepts some args for sklearn.mixture.GaussianMixture inside.
-            Default params are choosen as the most appropriate for flight-anomaly-detection problem
+            Constructor accepts args for sklearn.mixture.GaussianMixture inside.
+            Default params are choosen as the most appropriate
+            for flight-anomaly-detection problem
             according the original article.
         '''
+        assert n_components is not None or (n_min is not None and
+                                                        n_max is not None)
 
+        self.n_min = n_min
+        self.n_max = n_max
+        self.step = step if step is not None else 1
         self.n_components = n_components
         self.tol = tol
         self.covariance_type = covariance_type
@@ -65,7 +74,8 @@ class GaussianMixtureInTimeAnomalyDetector:
 
     def fit(self, X):
         '''
-            X must contains F objects time series with length T vectors-features with size N each
+            X must contains F objects time series with
+                    length T vectors-features with size N each
             i. e. X.shape is (F, N, M)
         '''
 
@@ -82,15 +92,47 @@ class GaussianMixtureInTimeAnomalyDetector:
 
         X = self._normalize(X)
 
-        gm = GaussianMixture(
-            n_components=self.n_components,
-            tol=self.tol,
-            covariance_type=self.covariance_type,
-            init_params=self.init_params,
-            random_state=self.random_state,
-                            )
+        if self.n_components is None:
+            self.bics = []
+            gms = []
+            n_range = np.arange(self.n_min, self.n_max + 1, self.step)
+            for n in tqdm(n_range, position=0, file=sys.stderr):
+                gm = GaussianMixture(
+                    n_components=n,
+                    tol=self.tol,
+                    covariance_type=self.covariance_type,
+                    init_params=self.init_params,
+                    random_state=self.random_state,
+                                    )
+                try:
+                    gm.fit(X)
+                    self.bics.append(gm.bic(X))
+                    gms.append(gm)
+                except:
+                    self.bics.append(np.inf)
+                    gms.append(None)
 
-        gm.fit(X)
+            best_bic = np.min(self.bics)
+            best_n = self.n_min + np.argmin(self.bics) * self.step
+            gm = gms[np.argmin(self.bics)]
+
+            self.n_components = best_n
+
+            print('Best number of clusters (according to BIC) - {}.'.format( \
+                                            self.n_components),file=sys.stderr)
+
+        else:
+            gm = GaussianMixture(
+                n_components=self.n_components,
+                tol=self.tol,
+                covariance_type=self.covariance_type,
+                init_params=self.init_params,
+                random_state=self.random_state,
+                                )
+
+            gm.fit(X)
+
+        print('Sample clusters fitting - OK.',file=sys.stderr)
 
         self.X = X.reshape(self.F, self.T, self.N)
 
@@ -98,11 +140,15 @@ class GaussianMixtureInTimeAnomalyDetector:
         self.cluster_means = gm.means_
         self.cluster_covariances = gm.covariances_
 
-        print('Start probabilities memorization',file=sys.stderr)
-
         self.__memorize_probs()
 
-        return self.__evaluate_log_likelihood(self.X)
+        print('Probabilities memorization - OK.',file=sys.stderr)
+
+        likelihood =  self.__evaluate_log_likelihood(self.X)
+
+        print('Log-likelihood evaluation - OK.',file=sys.stderr)
+
+        return likelihood
 
     def predict(self, X):
         '''
@@ -259,7 +305,7 @@ class GaussianMixtureInTimeAnomalyDetector:
 ### Additional functionality for specific tasks ###
 
 
-def smoothed_sample_anomalies(self, scores, halflife=2):
+def smoothed_sample_anomalies(scores, halflife=2):
     '''
         Exponential weighted sample likelihood.
         Args:
