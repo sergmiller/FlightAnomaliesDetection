@@ -112,9 +112,14 @@ class GaussianMixtureInTimeAnomalyDetector:
                     self.bics.append(np.inf)
                     gms.append(None)
 
+
             best_bic = np.min(self.bics)
             best_n = self.n_min + np.argmin(self.bics) * self.step
             gm = gms[np.argmin(self.bics)]
+
+            if gm is None:
+                print('Bad n_components number is choosen')
+                return
 
             self.n_components = best_n
 
@@ -183,7 +188,7 @@ class GaussianMixtureInTimeAnomalyDetector:
                 norma = np.sum(probs)
 
                 for cluster in np.arange(self.n_components):
-                    self.__p_cluster_sample[cluster][time][series] = probs[cluster] / norma
+                    self.__p_cluster_sample[cluster][time][series] = probs[cluster] / (norma + self.eps)
 
         # memorization all P(cluster|time)
         self.__p_cluster_time = np.zeros((self.n_components, self.T))
